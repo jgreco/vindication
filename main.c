@@ -42,11 +42,12 @@ int main(int argc, char *argv[])
 
 	int fd = open("/dev/tty", O_RDWR | O_NOCTTY);
 	ioctl(fd, TIOCGWINSZ, &term_size);  //save terminal size
-	printf("size: %d %d\n", term_size.ws_row, term_size.ws_col); fflush(stdout);
 	close(fd);
 
-	if(argc < 2)
+	if(argc < 2) {
 		fprintf(stderr, "Improper number of arguments.\n");
+		exit(EXIT_FAILURE);
+	}
 
 
 	if((pid = pty_fork()) == 0) {  //if child
@@ -164,7 +165,6 @@ void sigwinch_handler(int sig_num)
 {
 	int fd = open("/dev/tty", O_RDWR | O_NOCTTY);
 	ioctl(fd, TIOCGWINSZ, &term_size);  //save new terminal size
-	printf("size: %d %d\n", term_size.ws_row, term_size.ws_col); fflush(stdout);
 	close(fd);
 
 	ioctl(slave_pty, TIOCSWINSZ, &term_size);  //set terminal size
