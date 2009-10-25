@@ -24,6 +24,7 @@ int pid;
 
 char *term = NULL;
 struct termios term_settings;
+struct termios orig_settings;
 struct winsize term_size;
 
 enum mode { INSERT, NORMAL};
@@ -67,6 +68,7 @@ int main(int argc, char *argv[])
 		execvp(argv[1], argv+1);
 	} else {
 		tcgetattr(master_controlling_tty, &term_settings);
+		tcgetattr(master_controlling_tty, &orig_settings);
 		cfmakeraw(&term_settings);
 		term_settings.c_cc[VMIN] = 1;
 		term_settings.c_cc[VTIME] = 1;
@@ -128,7 +130,7 @@ int pty_fork()
 		fprintf(stderr, "FORK FAILED\n");
 		exit(EXIT_FAILURE);
 	} else if(n_pid == 0) {  //child
-		close(master);  //slave should learn it's place
+		close(master);
 
 		//make tty the controlling tty
 		setsid();
@@ -143,7 +145,7 @@ int pty_fork()
 
 		dup2(slave, STDIN_FILENO);
 		dup2(slave, STDOUT_FILENO);
-		dup2(slave, STDERR_FILENO); 
+		dup2(slave, STDERR_FILENO);
 	} else {  //parent
 		//parent junk
 	}
@@ -171,6 +173,7 @@ int get_pty(int *master, int *slave)
 
 void sigchld_handler(int sig_num)
 {
+	tcsetattr(master_controlling_tty, TCSANOW, &orig_settings);
 	exit(EXIT_SUCCESS);
 }
 
@@ -224,6 +227,16 @@ void input_mangle(char *in, int num)
 				case 'i':
 					state = INSERT;
 					break;
+				case 'A':
+					state = INSERT;
+					mangled_in[mangled_len++] = 27;
+					mangled_in[mangled_len++] = 91;
+					mangled_in[mangled_len++] = 70;
+
+					mangled_in[mangled_len++] = 27;
+					mangled_in[mangled_len++] = 91;
+					mangled_in[mangled_len++] = 67;
+
 				case 'h':
 					mangled_in[mangled_len++] = 27;
 					mangled_in[mangled_len++] = 91;
@@ -239,13 +252,16 @@ void input_mangle(char *in, int num)
 					mangled_in[mangled_len++] = 91;
 					mangled_in[mangled_len++] = 65;
 					break;
+
+				case 'a':
+					state = INSERT;
 				case 'l':
 					mangled_in[mangled_len++] = 27;
 					mangled_in[mangled_len++] = 91;
 					mangled_in[mangled_len++] = 67;
 					break;
 
-				case 'd':
+				case 'x':
 					mangled_in[mangled_len++] = 27;
 					mangled_in[mangled_len++] = 91;
 					mangled_in[mangled_len++] = 51;
