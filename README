@@ -1,0 +1,27 @@
+README for vindication
+======================
+
+  vindication is an input wrapper to "vi-ify" console programs with less
+  inspired input schemes.
+
+  More exactly, vindication allows users to use "normal mode" text editing
+  features with an console program on linux, interactive or otherwise.
+
+
+Usage
+=====
+
+  `vindication your_command_here`
+
+  For example, `vindication nano` will start GNU Nano running under
+  vindication*.  The user may then procede to edit text as usual however upon
+  pressing the escape key vindication is put into normal mode.  At this point
+  any input is interpreted by vindication and passed on to the underlying
+  program.  Currently supported normal mode commands are:
+
+	i, a, A, x, h, j, k, l
+
+
+  * Clearly this example is contrived as Vi is available for text editing
+  tasks on any Unix system making this entirely pointless.  Despite its
+  absurdity it makes for a decent example though.
