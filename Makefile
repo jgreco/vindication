@@ -13,5 +13,8 @@ ${OBJDIR}/%.o : %.c
 	@if [ ! -d $(OBJDIR) ]; then mkdir $(OBJDIR); fi #create directory if it doesn't exist
 	$(CC) $(CFLAGS) -c -o $@ $<
 
+install: bnxc
+	cp ./vindication /usr/bin/
+
 clean:
 	rm -f $(OBJECTS) vindication

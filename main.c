@@ -16,6 +16,12 @@
 
 #define BUFFER 1024
 
+//#define DEBUG
+
+#ifdef DEBUG
+FILE *log;
+#endif
+
 int master_controlling_tty;
 int master_pty;
 int slave_pty;
@@ -53,6 +59,12 @@ int main(int argc, char *argv[])
 	term = getenv("TERM");
 	state = INSERT;
 	mangled_len = 0;
+	command_count = 0;
+
+#ifdef DEBUG
+	log = fopen("dump", "w");
+#endif
+
 
 	master_controlling_tty = open("/dev/tty", O_RDWR | O_NOCTTY);
 	ioctl(master_controlling_tty, TIOCGWINSZ, &term_size);  //save terminal size
@@ -188,7 +200,7 @@ void sigwinch_handler(int sig_num)
 
 void input_mangle(char *in, int num)
 {
-	int i;
+	int i, k;
 
 	mangled_len = 0;
 
@@ -215,7 +227,7 @@ void input_mangle(char *in, int num)
 		else if(state == NORMAL) {
 
 			if(isdigit(in[i])) {
-				if(command_count == 0)
+				if(command_count == 1)
 					command_count = in[i] - '0';
 				else
 					command_count = command_count * 10 + in[i] - '0';
@@ -223,7 +235,11 @@ void input_mangle(char *in, int num)
 				continue;
 			}
 
+			for(k=0; k<command_count; k++) {
 			switch(in[i]) {
+				case 13:
+					mangled_in[mangled_len++] = 13;
+					break;
 				case 'i':
 					state = INSERT;
 					break;
@@ -238,6 +254,9 @@ void input_mangle(char *in, int num)
 					mangled_in[mangled_len++] = 67;
 
 				case 'h':
+#ifdef DEBUG
+	fprintf(log, "left\n"); fflush(log);
+#endif
 					mangled_in[mangled_len++] = 27;
 					mangled_in[mangled_len++] = 91;
 					mangled_in[mangled_len++] = 68;
@@ -268,6 +287,14 @@ void input_mangle(char *in, int num)
 					mangled_in[mangled_len++] = 126;
 					break;
 			}
+//				usleep(100000);
+			}
+
+#ifdef DEBUG
+	fprintf(log, "\n"); fflush(log);
+#endif
+
+			command_count = 1;
 		}
 	}
 
