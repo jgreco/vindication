@@ -10,16 +10,23 @@
 #include <string.h>
 #include <ctype.h>
 
+/* for portable behaviour, curses input/output is never used */
+#include <curses.h>
+#include <term.h>
+
 
 #undef max
 #define max(x,y) ((x) > (y) ? (x) : (y))
 
 #define BUFFER 1024
 
-//#define DEBUG
+/*
+#define DEBUG
+*/
+
 
 #ifdef DEBUG
-FILE *log;
+FILE *log_f;
 #endif
 
 int master_controlling_tty;
@@ -36,6 +43,15 @@ struct winsize term_size;
 enum mode { INSERT, NORMAL};
 int state;
 
+char *K_END;    int S_END;
+char *K_HOME;   int S_HOME;
+char *K_ENTER;  int S_ENTER;
+char *K_UP;     int S_UP;
+char *K_DOWN;   int S_DOWN;
+char *K_LEFT;   int S_LEFT;
+char *K_RIGHT;  int S_RIGHT;
+char *K_DELETE; int S_DELETE;
+
 char mangled_in[BUFFER];
 int mangled_len;
 int command_count;
@@ -45,12 +61,19 @@ int get_pty(int *master, int *slave);
 void sigchld_handler(int sig_num);
 void sigwinch_handler(int sig_num);
 
+void setup_escape_seqs();
 void input_mangle(char *in, int num);
 
 int main(int argc, char *argv[])
 {
 	struct sigaction chld;
 	struct sigaction winch;
+	int STUPID;
+
+#ifdef DEBUG
+	log_f = fopen("dump", "w");
+#endif
+
 	memset(&chld, 0, sizeof(chld));
 	memset(&winch, 0, sizeof(winch));
 	chld.sa_handler = &sigchld_handler;
@@ -61,13 +84,19 @@ int main(int argc, char *argv[])
 	mangled_len = 0;
 	command_count = 0;
 
-#ifdef DEBUG
-	log = fopen("dump", "w");
-#endif
+	STUPID = open("/dev/null", O_RDWR);  /* setupterm needs a file descriptor but we don't want it to mess around with our real terminal */
 
+	if(setupterm((char *)0, STUPID, (int *)0) == ERR) {
+
+		fprintf(stderr, "could not get terminfo.\n");
+		exit(EXIT_FAILURE);
+	}
+	close(STUPID);
+
+	setup_escape_seqs();
 
 	master_controlling_tty = open("/dev/tty", O_RDWR | O_NOCTTY);
-	ioctl(master_controlling_tty, TIOCGWINSZ, &term_size);  //save terminal size
+	ioctl(master_controlling_tty, TIOCGWINSZ, &term_size);  /* save terminal size */
 
 	if(argc < 2) {
 		fprintf(stderr, "Improper number of arguments.\n");
@@ -75,10 +104,14 @@ int main(int argc, char *argv[])
 	}
 
 
-	if((pid = pty_fork()) == 0) {  //if child
+	if((pid = pty_fork()) == 0) {  /* if child */
 		setenv("TERM", term, 1);
 		execvp(argv[1], argv+1);
 	} else {
+		char in[BUFFER];
+		int ret;
+		int standard_in = dup(STDIN_FILENO);
+
 		tcgetattr(master_controlling_tty, &term_settings);
 		tcgetattr(master_controlling_tty, &orig_settings);
 		cfmakeraw(&term_settings);
@@ -90,12 +123,9 @@ int main(int argc, char *argv[])
 		sigaction(SIGCHLD, &chld, NULL);
 		sigaction(SIGWINCH, &winch, NULL);
 
-		char in[BUFFER];
-		int ret;
-		int standard_in = dup(STDIN_FILENO);
-
 		while(1) {
 			int nfds=0;
+			int r;
 
 			fd_set rd, wr, er;
 			FD_ZERO(&rd);
@@ -108,7 +138,7 @@ int main(int argc, char *argv[])
 			nfds = max(nfds, master_pty);
 			FD_SET(master_pty, &rd);
 
-			int r = select(nfds+1, &rd, &wr, &er, NULL);
+			r = select(nfds+1, &rd, &wr, &er, NULL);
 
 			if(r == -1)
 				continue;
@@ -135,31 +165,32 @@ int pty_fork()
 {
 	int n_pid;
 	int master, slave;
+	int fd;
 
 	get_pty(&master, &slave);
 
 	if((n_pid= fork()) < 0) {
 		fprintf(stderr, "FORK FAILED\n");
 		exit(EXIT_FAILURE);
-	} else if(n_pid == 0) {  //child
+	} else if(n_pid == 0) {  /* child */
 		close(master);
 
-		//make tty the controlling tty
+		/* make tty the controlling tty */
 		setsid();
 
-		int fd = open("/dev/tty", O_RDWR | O_NOCTTY);
-		ioctl(fd, TIOCNOTTY, NULL);  //kill our controlling tty
+		fd = open("/dev/tty", O_RDWR | O_NOCTTY);
+		ioctl(fd, TIOCNOTTY, NULL);  /* kill our controlling tty */
 		close(fd);
 
 		fd = ioctl(slave, TIOCSCTTY, NULL);
 
-		ioctl(slave, TIOCSWINSZ, &term_size);  //set terminal size
+		ioctl(slave, TIOCSWINSZ, &term_size);  /* set terminal size */
 
 		dup2(slave, STDIN_FILENO);
 		dup2(slave, STDOUT_FILENO);
 		dup2(slave, STDERR_FILENO);
-	} else {  //parent
-		//parent junk
+	} else {  /* parent */
+		/* parent junk */
 	}
 
 	master_pty = master;
@@ -171,12 +202,15 @@ int pty_fork()
 
 int get_pty(int *master, int *slave)
 {
+	int num;
+	char *name;
+
 	*master = getpt();
 	grantpt(*master);
 	unlockpt(*master);
 
-	int num = *master;
-	char *name = ptsname(num);
+	num = *master;
+	name = ptsname(num);
 
 	*slave = open(name, O_RDWR | O_NOCTTY, 0);
 
@@ -191,9 +225,9 @@ void sigchld_handler(int sig_num)
 
 void sigwinch_handler(int sig_num)
 {
-	ioctl(master_controlling_tty, TIOCGWINSZ, &term_size);  //save new terminal size
+	ioctl(master_controlling_tty, TIOCGWINSZ, &term_size);  /* save new terminal size */
 
-	ioctl(slave_pty, TIOCSWINSZ, &term_size);  //set terminal size
+	ioctl(slave_pty, TIOCSWINSZ, &term_size);  /* set terminal size */
 
 	kill(pid, SIGWINCH);
 }
@@ -206,6 +240,12 @@ void input_mangle(char *in, int num)
 
 	if(num == 1 && in[0] == 27) {
 		if(state == INSERT) {
+			mangled_in[mangled_len++] = 27;
+			mangled_in[mangled_len++] = 91;
+			mangled_in[mangled_len++] = 68;
+
+			mangled_len = 3;
+
 			state = NORMAL;
 			return;
 		}
@@ -235,7 +275,7 @@ void input_mangle(char *in, int num)
 				continue;
 			}
 
-			for(k=0; k<command_count; k++) {
+			for(k=0; k<command_count; k++) {  /* FIXME turn into do-while loop, allow for 10-19 as count values */
 			switch(in[i]) {
 				case 13:
 					mangled_in[mangled_len++] = 13;
@@ -245,58 +285,63 @@ void input_mangle(char *in, int num)
 					break;
 				case 'A':
 					state = INSERT;
-					mangled_in[mangled_len++] = 27;
-					mangled_in[mangled_len++] = 91;
-					mangled_in[mangled_len++] = 70;
+					strcpy(mangled_in+mangled_len, K_END);
+					mangled_len += S_END;
 
-					mangled_in[mangled_len++] = 27;
-					mangled_in[mangled_len++] = 91;
-					mangled_in[mangled_len++] = 67;
+					/* sh does not properly place the cursor after 'end'.  why is this? */
+					strcpy(mangled_in+mangled_len, K_RIGHT);
+					mangled_len += S_RIGHT;
 
 				case 'h':
-#ifdef DEBUG
-	fprintf(log, "left\n"); fflush(log);
-#endif
-					mangled_in[mangled_len++] = 27;
-					mangled_in[mangled_len++] = 91;
-					mangled_in[mangled_len++] = 68;
+					strcpy(mangled_in+mangled_len, K_LEFT);
+					mangled_len += S_LEFT;
 					break;
 				case 'j':
-					mangled_in[mangled_len++] = 27;
-					mangled_in[mangled_len++] = 91;
-					mangled_in[mangled_len++] = 66;
+					strcpy(mangled_in+mangled_len, K_DOWN);
+					mangled_len += S_DOWN;
 					break;
 				case 'k':
-					mangled_in[mangled_len++] = 27;
-					mangled_in[mangled_len++] = 91;
-					mangled_in[mangled_len++] = 65;
+					strcpy(mangled_in+mangled_len, K_UP);
+					mangled_len += S_UP;
 					break;
 
 				case 'a':
 					state = INSERT;
 				case 'l':
-					mangled_in[mangled_len++] = 27;
-					mangled_in[mangled_len++] = 91;
-					mangled_in[mangled_len++] = 67;
+					strcpy(mangled_in+mangled_len, K_RIGHT);
+					mangled_len += S_RIGHT;
 					break;
 
 				case 'x':
-					mangled_in[mangled_len++] = 27;
-					mangled_in[mangled_len++] = 91;
-					mangled_in[mangled_len++] = 51;
-					mangled_in[mangled_len++] = 126;
+					strcpy(mangled_in+mangled_len, K_DELETE);
+					mangled_len += S_DELETE;
 					break;
 			}
-//				usleep(100000);
 			}
 
 #ifdef DEBUG
-	fprintf(log, "\n"); fflush(log);
+	fprintf(log_f, "\n"); fflush(log_f);
 #endif
 
 			command_count = 1;
 		}
 	}
+
+	return;
+}
+
+void setup_escape_seqs()
+{
+	K_DELETE = tigetstr("kdch1"); S_DELETE = strlen(K_DELETE);
+
+	K_HOME   = tigetstr("khome"); S_HOME   = strlen(K_HOME);
+	K_END    = tigetstr("kend");  S_END    = strlen(K_END);
+	K_ENTER  = tigetstr("kent");  S_ENTER  = strlen(K_ENTER);
+
+	K_UP     = tigetstr("kcuu1"); S_UP     = strlen(K_UP);
+	K_DOWN   = tigetstr("kcud1"); S_DOWN   = strlen(K_DOWN);
+	K_LEFT   = tigetstr("kcub1"); S_LEFT   = strlen(K_LEFT);
+	K_RIGHT  = tigetstr("kcuf1"); S_RIGHT  = strlen(K_RIGHT);
 
 	return;
 }
