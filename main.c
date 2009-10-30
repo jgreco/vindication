@@ -319,10 +319,6 @@ void input_mangle(char *in, int num)
 			}
 			}
 
-#ifdef DEBUG
-	fprintf(log_f, "\n"); fflush(log_f);
-#endif
-
 			command_count = 1;
 		}
 	}
@@ -336,7 +332,16 @@ void setup_escape_seqs()
 
 	K_HOME   = tigetstr("khome"); S_HOME   = strlen(K_HOME);
 	K_END    = tigetstr("kend");  S_END    = strlen(K_END);
-	K_ENTER  = tigetstr("kent");  S_ENTER  = strlen(K_ENTER);
+	K_ENTER  = tigetstr("kent");  
+	if(K_ENTER <= (char *)0) {
+#ifdef DEBUG
+	fprintf(log_f, "enter not in terminfo"); fflush(log_f);
+#endif
+		K_ENTER = strdup("\r");
+		S_ENTER = 1;
+	}
+	else
+		S_ENTER  = strlen(K_ENTER);
 
 	K_UP     = tigetstr("kcuu1"); S_UP     = strlen(K_UP);
 	K_DOWN   = tigetstr("kcud1"); S_DOWN   = strlen(K_DOWN);
