@@ -1,0 +1,55 @@
+.TH VINDICATION 1 "October 2009"
+.PD
+.PP
+.SH NAME
+vindication \- vi style input wrapper
+.SH SYNOPSIS
+.B vindication
+\fIcommand ...\fR
+.SH DESCRIPTION
+.B vindication
+is a lightweight utility that allows the user to interact with any terminal based program with Vi style normal mode.
+.PP
+.B vindication
+is unneeded for programs that use the GNU Readline library as these programs can be made to use Vi Mode bindings through readline.  Furthermore, the purpose of
+.B vindication
+is similar but orthoganal to that of \fBrlwrap\fR(1).  Where \fBrlwrap\fR is meant to wrap applications that lack any line-editing capabilities at all with readline functionality,
+.B vindication
+is meant to wrap programs that already have basic line editing capabilities with Vi style editing.
+.PP
+The distinction is important and can be demonstrated by comparing the behavior of the following commands:
+.PP
+.PD 0
+.TP 20
+\fBcat\fR
+# basic line editing features are unavaliable.
+.TP
+\fBvindication cat\fR
+# Vi mode keys do not function properly, only displaying escape sequences.
+.TP
+\fBrlwrap cat\fR
+# readline line editing capabilities are fully available.
+.PD
+.PP
+.SH TECHNICAL
+.B vindication
+works by opening a new pseudo-terminal, then forking off a child process.  The child closes its controlling TTY and makes the slave end of the new PTY its controlling TTY.  It then sets STDIN, STDOUT, and STDERR to its new controlling TTY and executes
+\fIcommand\fR.  
+The end result of this is that
+\fIcommand\fR
+is unaware that any sort of redirection is occuring, and will therefore function as normal.  Simple redirection of STDIN, STDOUT, and STDERR is not sufficient for many interactive programs (for example,
+.B less
+reads input files from STDIN but will read user input from its controlling TTY).
+.SH EXAMPLES
+.TP
+To use Vi normal mode features with nano:
+.B vindication nano
+.TP
+To use Vi normal mode features with elinks, while using an alternative elinks config file:
+.B vindication elinks --config-file alt.conf
+.SH AUTHOR
+.B vindication
+was written by John L. Greco. \fB<greco@drexel.edu>\fR
+.SH SEE ALSO
+\fBrlwrap\fR(1), \fBreadline\fR(3)
+.sp
