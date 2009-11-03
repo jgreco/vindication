@@ -287,11 +287,7 @@ void input_mangle(char *in, int num)
 					state = INSERT;
 					strcpy(mangled_in+mangled_len, K_END);
 					mangled_len += S_END;
-
-					/* sh does not properly place the cursor after 'end'.  why is this? */
-					strcpy(mangled_in+mangled_len, K_RIGHT);
-					mangled_len += S_RIGHT;
-
+					break;
 				case 'h':
 					strcpy(mangled_in+mangled_len, K_LEFT);
 					mangled_len += S_LEFT;
