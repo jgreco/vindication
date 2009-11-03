@@ -277,8 +277,9 @@ void input_mangle(char *in, int num)
 
 			for(k=0; k<command_count; k++) {  /* FIXME turn into do-while loop, allow for 10-19 as count values */
 			switch(in[i]) {
-				case 13:
-					mangled_in[mangled_len++] = 13;
+				case 13:  /* TODO fix this crap */
+					strcpy(mangled_in+mangled_len, K_ENTER);
+					mangled_len += S_ENTER;
 					break;
 				case 'i':
 					state = INSERT;
