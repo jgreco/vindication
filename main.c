@@ -10,7 +10,7 @@
 #include <string.h>
 #include <ctype.h>
 
-/* for portable behaviour, curses input/output is never used */
+/* for terminfo usage only.  curses input/output is never used */
 #include <curses.h>
 #include <term.h>
 
